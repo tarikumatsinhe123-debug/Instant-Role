@@ -4,6 +4,7 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -11,7 +12,11 @@ dotenv.config();
 function getFirebaseConfig() {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
-    return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    try {
+      return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } catch (err) {
+      console.error("Error parsing firebase-applet-config.json", err);
+    }
   }
   
   return {
@@ -26,20 +31,71 @@ function getFirebaseConfig() {
 }
 
 const firebaseConfig = getFirebaseConfig();
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+let db: any = null;
+
+if (firebaseConfig.apiKey) {
+  try {
+    const firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+  } catch (err) {
+    console.error("Firebase initialization failed:", err);
+  }
+} else {
+  console.warn("Firebase config missing. Some features will not work.");
+}
+
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string }) : null;
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null // Server is unauthenticated in this setup
+    },
+    operationType,
+    path
+  };
+  const jsonError = JSON.stringify(errInfo);
+  console.error('Firestore Error: ', jsonError);
+  throw new Error(jsonError);
+}
 
 const app = express();
 app.use(express.json());
 
 if (process.env.VERCEL) {
-  console.warn("WARNING: Running on Vercel. Database state is managed via Firestore.");
+  console.warn("Running on Vercel.");
 }
 
 // API Routes
-app.get("/api/user/:walletAddress", async (req, res) => {
-  const { walletAddress } = req.params;
-  const key = walletAddress.toLowerCase();
+app.get("/api/user/:id", async (req, res) => {
+  const { id } = req.params;
+  const key = id.toLowerCase();
+
+  if (!db) return res.json({ 
+    walletAddress: id.startsWith("guest_") ? null : id, 
+    id: key, 
+    freeUsesCount: 0, 
+    subscriptionExpiry: null 
+  });
   
   try {
     const userDoc = await getDoc(doc(db, "users", key));
@@ -47,35 +103,35 @@ app.get("/api/user/:walletAddress", async (req, res) => {
       res.json(userDoc.data());
     } else {
       res.json({
-        walletAddress,
+        walletAddress: id.startsWith("guest_") ? null : id,
+        id: key,
         freeUsesCount: 0,
         subscriptionExpiry: null,
       });
     }
   } catch (error) {
-    console.error("Error fetching user:", error);
-    res.status(500).json({ error: "Failed to fetch user" });
+    console.error("Firestore Get Error:", error);
+    res.status(500).json({ error: "Failed to fetch user status", details: String(error) });
   }
 });
 
 app.post("/api/usage/increment", async (req, res) => {
-  const { walletAddress } = req.body;
-  if (!walletAddress) return res.status(400).json({ error: "Wallet address required" });
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: "User ID required" });
 
-  const key = walletAddress.toLowerCase();
+  if (!db) return res.status(500).json({ error: "Database not connected" });
+
+  const key = id.toLowerCase();
   const userRef = doc(db, "users", key);
 
   try {
     const userDoc = await getDoc(userRef);
     let userData = userDoc.exists() ? userDoc.data() : { 
-      walletAddress, 
+      walletAddress: id.startsWith("guest_") ? null : id,
+      id: key,
       freeUsesCount: 0, 
       subscriptionExpiry: null 
     };
-
-    if (!userDoc.exists()) {
-      await setDoc(userRef, userData);
-    }
 
     // Double check subscription
     const isSubscribed = userData.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
@@ -84,7 +140,10 @@ app.post("/api/usage/increment", async (req, res) => {
       return res.status(403).json({ error: "Free limit reached. Subscription required." });
     }
 
-    if (!isSubscribed) {
+    if (!userDoc.exists()) {
+      userData.freeUsesCount = 1;
+      await setDoc(userRef, userData);
+    } else if (!isSubscribed) {
       await updateDoc(userRef, {
         freeUsesCount: increment(1)
       });
@@ -93,20 +152,21 @@ app.post("/api/usage/increment", async (req, res) => {
     
     res.json(userData);
   } catch (error) {
-    console.error("Error incrementing usage:", error);
-    res.status(500).json({ error: "Failed to update usage" });
+    console.error("Firestore Increment Error:", error);
+    res.status(500).json({ error: "Failed to update usage", details: String(error) });
   }
 });
 
 app.post("/api/subscription/confirm", async (req, res) => {
-  const { walletAddress, txSignature } = req.body;
+  const { walletAddress } = req.body;
   if (!walletAddress) return res.status(400).json({ error: "Wallet address required" });
+
+  if (!db) return res.status(500).json({ error: "Database not connected" });
 
   const key = walletAddress.toLowerCase();
   const userRef = doc(db, "users", key);
 
   try {
-    // Set expiry to 30 days from now
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 30);
     const subscriptionExpiry = expiry.toISOString();
@@ -117,6 +177,7 @@ app.post("/api/subscription/confirm", async (req, res) => {
     } else {
       await setDoc(userRef, {
         walletAddress,
+        id: key,
         freeUsesCount: 0,
         subscriptionExpiry
       });
@@ -125,8 +186,8 @@ app.post("/api/subscription/confirm", async (req, res) => {
     const updatedDoc = await getDoc(userRef);
     res.json(updatedDoc.data());
   } catch (error) {
-    console.error("Error confirming subscription:", error);
-    res.status(500).json({ error: "Failed to confirm subscription" });
+    console.error("Firestore Confirm Error:", error);
+    res.status(500).json({ error: "Failed to confirm subscription", details: String(error) });
   }
 });
 
@@ -142,11 +203,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // Relative to the server script
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      console.warn("Dist folder not found. This is expected in development mode.");
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -154,10 +220,9 @@ async function startServer() {
   });
 }
 
-// In standard environments, start the server
-// In Vercel, this file will be imported and we export the app
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   startServer();
 }
 
 export default app;
+

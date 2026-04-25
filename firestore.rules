@@ -9,22 +9,18 @@ service cloud.firestore {
 
     // Helper functions
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['walletAddress', 'freeUsesCount']) &&
-             data.walletAddress is string &&
-             data.freeUsesCount is int;
+      // Allow any document that has a freeUsesCount integer
+      return data.get('freeUsesCount', 0) is int;
     }
 
     // Users collection
-    match /users/{walletAddress} {
-      allow get: if isValidId(walletAddress);
-      // In this specific full-stack app, the server performs the writes.
-      // Since we are using the client SDK on the server, we allow writes
-      // based on ID validation. 
-      allow create, update: if isValidId(walletAddress) && isValidUser(request.resource.data);
+    match /users/{userId} {
+      allow get, list: if isValidId(userId);
+      allow create, update: if isValidId(userId) && isValidUser(request.resource.data);
     }
   }
 }

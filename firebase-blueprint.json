@@ -5,8 +5,12 @@
       "description": "Information about the user's role and subscription",
       "type": "object",
       "properties": {
-        "walletAddress": {
+        "id": {
           "type": "string",
+          "description": "Unique identifier for the user (wallet or guest ID)"
+        },
+        "walletAddress": {
+          "type": ["string", "null"],
           "description": "The user's Solana wallet address"
         },
         "freeUsesCount": {
@@ -19,13 +23,13 @@
           "description": "ISO timestamp of when the subscription expires"
         }
       },
-      "required": ["walletAddress", "freeUsesCount"]
+      "required": ["id", "freeUsesCount"]
     }
   },
   "firestore": {
-    "/users/{walletAddress}": {
+    "/users/{userId}": {
       "schema": "User",
-      "description": "Collection of user data indexed by wallet address"
+      "description": "Collection of user data indexed by user ID"
     }
   }
 }

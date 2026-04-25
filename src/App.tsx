@@ -15,15 +15,25 @@ interface UserData {
 
 export default function App() {
   const [wallet, setWallet] = useState<string | null>(null);
+  const [guestId, setGuestId] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [result, setResult] = useState<any>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
 
-  const fetchUserStatus = useCallback(async (address: string) => {
+  useEffect(() => {
+    let gid = localStorage.getItem("guest_id");
+    if (!gid) {
+      gid = "guest_" + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem("guest_id", gid);
+    }
+    setGuestId(gid);
+  }, []);
+
+  const fetchUserStatus = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/user/${address}`);
+      const res = await fetch(`/api/user/${id}`);
       const data = await res.json();
       setUserData(data);
     } catch (err) {
@@ -32,10 +42,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (wallet) {
-      fetchUserStatus(wallet);
+    const id = wallet || guestId;
+    if (id) {
+      fetchUserStatus(id);
     }
-  }, [wallet, fetchUserStatus]);
+  }, [wallet, guestId, fetchUserStatus]);
 
   const handleConnect = async () => {
     const address = await connectWallet();
@@ -50,10 +61,8 @@ export default function App() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wallet) {
-      handleConnect();
-      return;
-    }
+    const id = wallet || guestId;
+    if (!id) return;
     if (!jobTitle) return;
 
     if (!canGenerate && !isSubscribed) {
@@ -67,7 +76,7 @@ export default function App() {
       const usageRes = await fetch("/api/usage/increment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: wallet }),
+        body: JSON.stringify({ id }),
       });
 
       if (!usageRes.ok) {
@@ -99,7 +108,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-6">
-          {wallet && (
+          {(wallet || guestId) && (
             <div className="px-3 py-1 bg-white border border-slate-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center">
               <span className={cn(
                 "inline-block w-2 h-2 rounded-full mr-2",
@@ -210,7 +219,7 @@ export default function App() {
       </main>
 
       {/* Subtle Trial Toast */}
-      {wallet && !isSubscribed && (
+      {(wallet || guestId) && !isSubscribed && (
         <motion.div 
           initial={{ x: 100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}

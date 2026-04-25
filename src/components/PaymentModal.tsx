@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, ShieldCheck, Zap, Wallet, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getSolPriceInUsd, sendPayment } from "../lib/web3";
+import { getSolPriceInUsd, sendPayment, connectWallet } from "../lib/web3";
 import { cn } from "../lib/utils";
 
 interface PaymentModalProps {
@@ -31,6 +31,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
     setLoading(true);
     setError(null);
     try {
+      if (!walletAddress) {
+        const address = await connectWallet();
+        if (!address) return;
+        // The parent App will receive the wallet update via its own connect logic if we were using a context, 
+        // but here we just need it for the transaction. 
+        // Actually, it's better to tell the user to connect via the main button or we just handle it here.
+        // Let's just prompt them or use the imported connectWallet.
+        return; 
+      }
       const signature = await sendPayment(walletAddress, 10);
       const res = await fetch("/api/subscription/confirm", {
         method: "POST",
@@ -139,7 +148,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
               disabled={loading || (selectedAsset === "SOL" && !solPrice)}
               className={cn(
                 "w-full py-5 rounded-[1.5rem] font-bold text-white transition-all flex items-center justify-center space-x-3 shadow-2xl shadow-slate-900/20",
-                loading ? "bg-slate-300 pointer-events-none" : "bg-slate-900 hover:bg-black active:scale-[0.98]"
+                loading ? "bg-slate-300 pointer-events-none" : 
+                !walletAddress ? "bg-slate-500 hover:bg-slate-600" : "bg-slate-900 hover:bg-black active:scale-[0.98]"
               )}
             >
               {loading ? (
@@ -147,7 +157,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
               ) : (
                 <>
                   <Wallet size={18} />
-                  <span>Subscribe via {selectedAsset}</span>
+                  <span>{!walletAddress ? "Connect Wallet to Pay" : `Subscribe via ${selectedAsset}`}</span>
                 </>
               )}
             </button>

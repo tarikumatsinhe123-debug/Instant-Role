@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+const ai = new GoogleGenAI({ apiKey: (process.env as any).GEMINI_API_KEY });
 
 export async function generateResumeAndCoverLetter(jobTitle: string) {
   const prompt = `
