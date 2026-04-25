@@ -2,7 +2,24 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } f
 import axios from "axios";
 
 // Project wallet address (Public key where $10 USD will be sent)
-const PROJECT_WALLET = new PublicKey("9xQeWvG816bSR9EPfZA6z4PZ1Z2A5Vv9C7v7z8x9y7zB"); // Example placeholder
+const DEFAULT_WALLET = "GqHuzouf9phsh5rpV9HfiBZSHhzDSajCT9w7Qr1VQTtj";
+const envWallet = import.meta.env.VITE_SOLANA_PROJECT_WALLET;
+
+// Validate if the environment variable is a non-empty string
+const isValidEnvWallet = typeof envWallet === 'string' && envWallet.trim().length > 0;
+const PROJECT_WALLET_STR = isValidEnvWallet ? envWallet.trim() : DEFAULT_WALLET;
+
+let PROJECT_WALLET: PublicKey;
+
+try {
+  PROJECT_WALLET = new PublicKey(PROJECT_WALLET_STR);
+} catch (e) {
+  // If the key provided by the user is invalid, we log a warning but fall back to the default to keep the app functional
+  if (isValidEnvWallet) {
+    console.warn(`[InstantRole] Provided wallet address "${PROJECT_WALLET_STR}" is invalid. Falling back to default project wallet.`);
+  }
+  PROJECT_WALLET = new PublicKey(DEFAULT_WALLET);
+}
 
 export async function getSolPriceInUsd() {
   try {
