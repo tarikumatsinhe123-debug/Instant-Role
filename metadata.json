@@ -1,0 +1,6 @@
+{
+  "name": "InstantRole",
+  "description": "AI-powered professional resume and cover letter generator with crypto subscription model.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Content Generation", "Web3 Payments"]
+}
