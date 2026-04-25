@@ -15,6 +15,10 @@ const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 const app = express();
 app.use(express.json());
 
+if (process.env.VERCEL) {
+  console.warn("WARNING: Running on Vercel. Database state is managed via Firestore.");
+}
+
 // API Routes
 app.get("/api/user/:walletAddress", async (req, res) => {
   const { walletAddress } = req.params;
@@ -134,8 +138,8 @@ async function startServer() {
 }
 
 // In standard environments, start the server
-// In Vercel or Netlify, this file will be imported and we export the app
-if (process.env.NODE_ENV !== 'production' || (!process.env.VERCEL && !process.env.NETLIFY)) {
+// In Vercel, this file will be imported and we export the app
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   startServer();
 }
 
