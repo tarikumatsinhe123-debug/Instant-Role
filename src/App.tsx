@@ -245,6 +245,16 @@ export default function App() {
           <span className="flex items-center gap-1.5">
             NETWORK: MAINNET
           </span>
+          <span className="text-slate-200">|</span>
+          <button 
+            onClick={() => {
+              localStorage.removeItem("guest_id");
+              window.location.reload();
+            }}
+            className="hover:text-slate-600 transition-colors cursor-pointer uppercase"
+          >
+            Reset Session (Trial)
+          </button>
         </div>
         <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">
           &copy; {new Date().getFullYear()} {import.meta.env.VITE_APP_NAME || "InstantRole"}. Built for the new economy.
@@ -255,7 +265,10 @@ export default function App() {
         isOpen={paywallOpen}
         onClose={() => setPaywallOpen(false)}
         walletAddress={wallet || ""}
-        onSuccess={() => wallet && fetchUserStatus(wallet)}
+        onSuccess={(address) => {
+          setWallet(address);
+          fetchUserStatus(address);
+        }}
       />
     </div>
   );

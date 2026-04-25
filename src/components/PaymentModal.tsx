@@ -8,7 +8,7 @@ interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   walletAddress: string;
-  onSuccess: () => void;
+  onSuccess: (address: string) => void;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, walletAddress, onSuccess }) => {
@@ -31,23 +31,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
     setLoading(true);
     setError(null);
     try {
-      if (!walletAddress) {
+      let currentWallet = walletAddress;
+      if (!currentWallet) {
         const address = await connectWallet();
-        if (!address) return;
-        // The parent App will receive the wallet update via its own connect logic if we were using a context, 
-        // but here we just need it for the transaction. 
-        // Actually, it's better to tell the user to connect via the main button or we just handle it here.
-        // Let's just prompt them or use the imported connectWallet.
-        return; 
+        if (!address) {
+          setLoading(false);
+          return;
+        }
+        currentWallet = address;
+        // In a real app we'd probably call an onboarding callback here too, 
+        // but for now we'll just use the address for the transaction.
       }
-      const signature = await sendPayment(walletAddress, 10);
+      
+      const signature = await sendPayment(currentWallet, 10);
       const res = await fetch("/api/subscription/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress, txSignature: signature }),
+        body: JSON.stringify({ walletAddress: currentWallet, txSignature: signature }),
       });
       if (res.ok) {
-        onSuccess();
+        onSuccess(currentWallet);
         onClose();
       } else {
         throw new DOMException("Failed to confirm subscription on server", "AbortError");
