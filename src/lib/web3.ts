@@ -15,8 +15,9 @@ try {
   PROJECT_WALLET = new PublicKey(PROJECT_WALLET_STR);
 } catch (e) {
   // If the key provided by the user is invalid, we log a warning but fall back to the default to keep the app functional
+  const appName = import.meta.env.VITE_APP_NAME || "InstantRole";
   if (isValidEnvWallet) {
-    console.warn(`[InstantRole] Provided wallet address "${PROJECT_WALLET_STR}" is invalid. Falling back to default project wallet.`);
+    console.warn(`[${appName}] Provided wallet address "${PROJECT_WALLET_STR}" is invalid. Falling back to default project wallet.`);
   }
   PROJECT_WALLET = new PublicKey(DEFAULT_WALLET);
 }
@@ -56,7 +57,8 @@ export async function sendPayment(walletAddress: string, amountUsd: number) {
   const solAmount = amountUsd / solPrice;
   const lamports = Math.floor(solAmount * LAMPORTS_PER_SOL);
 
-  const connection = new Connection("https://api.mainnet-beta.solana.com");
+  const rpcUrl = import.meta.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+  const connection = new Connection(rpcUrl);
   const transaction = new Transaction().add(
     SystemProgram.transfer({
       fromPubkey: new PublicKey(walletAddress),

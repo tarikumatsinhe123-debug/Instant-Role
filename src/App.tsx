@@ -77,7 +77,7 @@ export default function App() {
 
       const newUserStatus = await usageRes.json();
       setUserData(newUserStatus);
-
+      
       const data = await generateResumeAndCoverLetter(jobTitle);
       setResult(data);
     } catch (err) {
@@ -95,7 +95,7 @@ export default function App() {
           <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
             <Sparkles size={16} className="text-white" fill="currentColor" />
           </div>
-          <span className="text-xl font-bold tracking-tight">InstantRole</span>
+          <span className="text-xl font-bold tracking-tight">{import.meta.env.VITE_APP_NAME || "InstantRole"}</span>
         </div>
         
         <div className="flex items-center gap-6">
@@ -238,7 +238,7 @@ export default function App() {
           </span>
         </div>
         <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-          &copy; 2024 InstantRole. Built for the new economy.
+          &copy; {new Date().getFullYear()} {import.meta.env.VITE_APP_NAME || "InstantRole"}. Built for the new economy.
         </div>
       </footer>
 
