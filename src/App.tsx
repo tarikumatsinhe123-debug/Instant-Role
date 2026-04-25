@@ -81,7 +81,7 @@ export default function App() {
 
       if (!usageRes.ok) {
         setPaywallOpen(true);
-        throw new Error("Usage limit reached");
+        throw new DOMException("Usage limit reached", "QuotaExceededError");
       }
 
       const newUserStatus = await usageRes.json();

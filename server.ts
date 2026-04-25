@@ -4,7 +4,7 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
@@ -44,7 +44,7 @@ if (firebaseConfig.apiKey) {
   console.warn("Firebase config missing. Some features will not work.");
 }
 
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string }) : null;
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 enum OperationType {
   CREATE = 'create',
@@ -75,7 +75,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   };
   const jsonError = JSON.stringify(errInfo);
   console.error('Firestore Error: ', jsonError);
-  throw new Error(jsonError);
+  throw new DOMException(jsonError, 'AbortError');
 }
 
 const app = express();
@@ -86,6 +86,53 @@ if (process.env.VERCEL) {
 }
 
 // API Routes
+app.post("/api/generate", async (req, res) => {
+  const { jobTitle } = req.body;
+  
+  if (!jobTitle) {
+    return res.status(400).json({ error: "Job title is required" });
+  }
+
+  if (!genAI) {
+    return res.status(500).json({ error: "AI API key not configured" });
+  }
+
+  const prompt = `
+    Generate a professional resume and a tailored cover letter for the job title: "${jobTitle}".
+    
+    The response MUST be in JSON format with the following structure:
+    {
+      "resume": {
+        "summary": "Professional summary...",
+        "experience": [
+          { "title": "Job Title", "company": "Example Corp", "period": "2020 - Present", "bullets": ["bullet 1", "bullet 2"] }
+        ],
+        "skills": ["Skill 1", "Skill 2"]
+      },
+      "coverLetter": "Full cover letter text..."
+    }
+    
+    Ensure the content is high-quality, professional, and includes industry-standard keywords.
+  `;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const responseText = result.response.text();
+    if (!responseText) throw new Error("No text returned from AI");
+    res.json(JSON.parse(responseText));
+  } catch (error) {
+    console.error("AI Generation Error:", error);
+    res.status(500).json({ error: "Failed to generate content", details: String(error) });
+  }
+});
+
 app.get("/api/user/:id", async (req, res) => {
   const { id } = req.params;
   const key = id.toLowerCase();

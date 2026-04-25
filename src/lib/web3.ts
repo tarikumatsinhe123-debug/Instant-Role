@@ -50,7 +50,9 @@ export async function connectWallet() {
 }
 
 export async function sendPayment(walletAddress: string, amountUsd: number) {
-  if (!("solana" in window)) throw new Error("Solana wallet not found");
+  if (!("solana" in window)) {
+    throw new DOMException("Solana wallet not found", "NotFoundError");
+  }
   
   const provider = (window as any).solana;
   const solPrice = await getSolPriceInUsd();

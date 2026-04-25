@@ -50,7 +50,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
         onSuccess();
         onClose();
       } else {
-        throw new Error("Failed to confirm subscription on server");
+        throw new DOMException("Failed to confirm subscription on server", "AbortError");
       }
     } catch (err: any) {
       setError(err.message || "Payment failed. Please try again.");
