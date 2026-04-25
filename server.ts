@@ -183,7 +183,7 @@ app.post("/api/usage/increment", async (req, res) => {
     // Double check subscription
     const isSubscribed = userData.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
 
-    if (!isSubscribed && userData.freeUsesCount >= 3) {
+    if (!isSubscribed && userData.freeUsesCount >= 1) {
       return res.status(403).json({ error: "Free limit reached. Subscription required." });
     }
 

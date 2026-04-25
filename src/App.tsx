@@ -56,7 +56,7 @@ export default function App() {
   };
 
   const isSubscribed = userData?.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
-  const freeLeft = Math.max(0, 3 - (userData?.freeUsesCount || 0));
+  const freeLeft = Math.max(0, 1 - (userData?.freeUsesCount || 0));
   const canGenerate = isSubscribed || freeLeft > 0;
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -80,8 +80,10 @@ export default function App() {
       });
 
       if (!usageRes.ok) {
-        setPaywallOpen(true);
-        throw new DOMException("Usage limit reached", "QuotaExceededError");
+        if (usageRes.status === 403) {
+          setPaywallOpen(true);
+        }
+        throw new Error("Usage limit reached");
       }
 
       const newUserStatus = await usageRes.json();
@@ -89,8 +91,11 @@ export default function App() {
       
       const data = await generateResumeAndCoverLetter(jobTitle);
       setResult(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Generation failed", err);
+      if (err.message !== "Usage limit reached") {
+        alert("Something went wrong during generation. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -129,7 +134,7 @@ export default function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center pt-20 px-10 pb-20">
+      <main className="flex-1 flex flex-col items-center pt-20 px-10 pb-20 overflow-hidden">
         <div className="w-full max-w-2xl text-center mb-12">
           <motion.h1 
             initial={{ opacity: 0, y: 10 }}
@@ -177,7 +182,7 @@ export default function App() {
           <div className="mt-6 flex justify-center gap-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Powered by Gemini Pro</span>
             <span className="text-slate-300">|</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Secure on Solana</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">1 Free Credit Available</span>
           </div>
         </div>
 
@@ -199,18 +204,18 @@ export default function App() {
               <ResumeViewer key="result" data={result} />
             ) : (
               /* Benefits Grid */
-              <div className="grid grid-cols-3 gap-12 w-full max-w-4xl opacity-80">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-4xl opacity-80">
                 <div className="space-y-2">
                   <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">Tailored Content</div>
                   <p className="text-sm text-slate-500 leading-relaxed">Industry-standard keywords and performance-based experience bullet points.</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">Crypto Ready</div>
-                  <p className="text-sm text-slate-500 leading-relaxed">One-click $10 USD monthly subscription paid in SOL, ETH, or BTC.</p>
+                  <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">No Upfront Cost</div>
+                  <p className="text-sm text-slate-500 leading-relaxed">Get your first draft absolutely free. No wallet connection needed initially.</p>
                 </div>
                 <div className="space-y-2">
                   <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">Unlimited Access</div>
-                  <p className="text-sm text-slate-500 leading-relaxed">Go beyond the 3-free trial and generate infinite variations for any application.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed">Go beyond the 1-free trial and generate infinite variations for any application.</p>
                 </div>
               </div>
             )}
@@ -230,7 +235,7 @@ export default function App() {
           </div>
           <div>
             <p className="text-xs font-bold text-slate-800">Trial Status</p>
-            <p className="text-[10px] text-slate-500">{freeLeft} generations remaining until pro upgrade.</p>
+            <p className="text-[10px] text-slate-500">{freeLeft} generations remaining for this session.</p>
           </div>
         </motion.div>
       )}
