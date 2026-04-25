@@ -1,94 +1,112 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 
 dotenv.config();
 
-const USERS_DB = "users.json";
-
-// Initialize DB if not exists
-if (!fs.existsSync(USERS_DB)) {
-  fs.writeFileSync(USERS_DB, JSON.stringify({}));
-}
-
-if (process.env.VERCEL) {
-  console.warn("WARNING: Running on Vercel. Local file persistence (users.json) will be ephemeral and will reset on cold starts. Consider using a database like Firebase or Vercel KV for production.");
-}
-
-function getUsers() {
-  try {
-    return JSON.parse(fs.readFileSync(USERS_DB, "utf-8"));
-  } catch (err) {
-    return {};
-  }
-}
-
-function saveUsers(users: any) {
-  fs.writeFileSync(USERS_DB, JSON.stringify(users, null, 2));
-}
+// Load Firebase config
+const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf-8"));
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
 const app = express();
-
 app.use(express.json());
 
 // API Routes
-app.get("/api/user/:walletAddress", (req, res) => {
+app.get("/api/user/:walletAddress", async (req, res) => {
   const { walletAddress } = req.params;
-  const users = getUsers();
-  const user = users[walletAddress.toLowerCase()] || {
-    walletAddress,
-    freeUsesCount: 0,
-    subscriptionExpiry: null,
-  };
-  res.json(user);
+  const key = walletAddress.toLowerCase();
+  
+  try {
+    const userDoc = await getDoc(doc(db, "users", key));
+    if (userDoc.exists()) {
+      res.json(userDoc.data());
+    } else {
+      res.json({
+        walletAddress,
+        freeUsesCount: 0,
+        subscriptionExpiry: null,
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
 });
 
-app.post("/api/usage/increment", (req, res) => {
+app.post("/api/usage/increment", async (req, res) => {
   const { walletAddress } = req.body;
   if (!walletAddress) return res.status(400).json({ error: "Wallet address required" });
 
-  const users = getUsers();
   const key = walletAddress.toLowerCase();
-  
-  if (!users[key]) {
-    users[key] = { walletAddress, freeUsesCount: 0, subscriptionExpiry: null };
-  }
+  const userRef = doc(db, "users", key);
 
-  // Double check subscription
-  const isSubscribed = users[key].subscriptionExpiry && new Date(users[key].subscriptionExpiry) > new Date();
+  try {
+    const userDoc = await getDoc(userRef);
+    let userData = userDoc.exists() ? userDoc.data() : { 
+      walletAddress, 
+      freeUsesCount: 0, 
+      subscriptionExpiry: null 
+    };
 
-  if (!isSubscribed && users[key].freeUsesCount >= 3) {
-    return res.status(403).json({ error: "Free limit reached. Subscription required." });
-  }
+    if (!userDoc.exists()) {
+      await setDoc(userRef, userData);
+    }
 
-  if (!isSubscribed) {
-    users[key].freeUsesCount += 1;
+    // Double check subscription
+    const isSubscribed = userData.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
+
+    if (!isSubscribed && userData.freeUsesCount >= 3) {
+      return res.status(403).json({ error: "Free limit reached. Subscription required." });
+    }
+
+    if (!isSubscribed) {
+      await updateDoc(userRef, {
+        freeUsesCount: increment(1)
+      });
+      userData.freeUsesCount += 1;
+    }
+    
+    res.json(userData);
+  } catch (error) {
+    console.error("Error incrementing usage:", error);
+    res.status(500).json({ error: "Failed to update usage" });
   }
-  
-  saveUsers(users);
-  res.json(users[key]);
 });
 
-app.post("/api/subscription/confirm", (req, res) => {
-  const { walletAddress, txSignature } = req.body; // txSignature for "verification" (simplified for demo)
+app.post("/api/subscription/confirm", async (req, res) => {
+  const { walletAddress, txSignature } = req.body;
   if (!walletAddress) return res.status(400).json({ error: "Wallet address required" });
 
-  const users = getUsers();
   const key = walletAddress.toLowerCase();
-  
-  if (!users[key]) {
-    users[key] = { walletAddress, freeUsesCount: 0, subscriptionExpiry: null };
-  }
+  const userRef = doc(db, "users", key);
 
-  // Set expiry to 30 days from now
-  const expiry = new Date();
-  expiry.setDate(expiry.getDate() + 30);
-  users[key].subscriptionExpiry = expiry.toISOString();
-  
-  saveUsers(users);
-  res.json(users[key]);
+  try {
+    // Set expiry to 30 days from now
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 30);
+    const subscriptionExpiry = expiry.toISOString();
+
+    const userDoc = await getDoc(userRef);
+    if (userDoc.exists()) {
+      await updateDoc(userRef, { subscriptionExpiry });
+    } else {
+      await setDoc(userRef, {
+        walletAddress,
+        freeUsesCount: 0,
+        subscriptionExpiry
+      });
+    }
+
+    const updatedDoc = await getDoc(userRef);
+    res.json(updatedDoc.data());
+  } catch (error) {
+    console.error("Error confirming subscription:", error);
+    res.status(500).json({ error: "Failed to confirm subscription" });
+  }
 });
 
 async function startServer() {
@@ -96,6 +114,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -115,8 +134,8 @@ async function startServer() {
 }
 
 // In standard environments, start the server
-// In Vercel, this file will be imported and we export the app
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+// In Vercel or Netlify, this file will be imported and we export the app
+if (process.env.NODE_ENV !== 'production' || (!process.env.VERCEL && !process.env.NETLIFY)) {
   startServer();
 }
 

@@ -1,0 +1,31 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Information about the user's role and subscription",
+      "type": "object",
+      "properties": {
+        "walletAddress": {
+          "type": "string",
+          "description": "The user's Solana wallet address"
+        },
+        "freeUsesCount": {
+          "type": "integer",
+          "description": "Number of free AI uses consumed"
+        },
+        "subscriptionExpiry": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of when the subscription expires"
+        }
+      },
+      "required": ["walletAddress", "freeUsesCount"]
+    }
+  },
+  "firestore": {
+    "/users/{walletAddress}": {
+      "schema": "User",
+      "description": "Collection of user data indexed by wallet address"
+    }
+  }
+}

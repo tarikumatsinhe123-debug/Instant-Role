@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['walletAddress', 'freeUsesCount']) &&
+             data.walletAddress is string &&
+             data.freeUsesCount is int;
+    }
+
+    // Users collection
+    match /users/{walletAddress} {
+      allow get: if isValidId(walletAddress);
+      // In this specific full-stack app, the server performs the writes.
+      // Since we are using the client SDK on the server, we allow writes
+      // based on ID validation. 
+      allow create, update: if isValidId(walletAddress) && isValidUser(request.resource.data);
+    }
+  }
+}
