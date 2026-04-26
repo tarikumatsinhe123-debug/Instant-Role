@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, Sparkles, Loader2, Wallet, ArrowRight, Zap } from "lucide-react";
+import { Search, Sparkles, Loader2, Wallet, ArrowRight, Zap, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { connectWallet } from "./lib/web3";
 import { generateResumeAndCoverLetter } from "./lib/gemini";
@@ -29,13 +29,26 @@ export default function App() {
       localStorage.setItem("guest_id", gid);
     }
     setGuestId(gid);
+
+    // Try auto-connecting wallet if previously used
+    const lastWallet = localStorage.getItem("last_wallet");
+    if (lastWallet && "solana" in window) {
+      const provider = (window as any).solana;
+      if (provider?.isPhantom) {
+        provider.connect({ onlyIfTrusted: true })
+          .then((resp: any) => setWallet(resp.publicKey.toString()))
+          .catch(() => {});
+      }
+    }
   }, []);
 
   const fetchUserStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/user/${id}`);
-      const data = await res.json();
-      setUserData(data);
+      if (res.ok) {
+        const data = await res.json();
+        setUserData(data);
+      }
     } catch (err) {
       console.error("Failed to fetch user status", err);
     }
@@ -46,12 +59,16 @@ export default function App() {
     if (id) {
       fetchUserStatus(id);
     }
+    if (wallet) {
+      localStorage.setItem("last_wallet", wallet);
+    }
   }, [wallet, guestId, fetchUserStatus]);
 
   const handleConnect = async () => {
     const address = await connectWallet();
     if (address) {
       setWallet(address);
+      localStorage.setItem("last_wallet", address);
     }
   };
 
@@ -62,8 +79,13 @@ export default function App() {
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = wallet || guestId;
-    if (!id) return;
+    if (!id || loading) return;
     if (!jobTitle) return;
+
+    // Ensure we have user data before proceeding if we think we might be blocked
+    if (userData === null) {
+      await fetchUserStatus(id);
+    }
 
     if (!canGenerate && !isSubscribed) {
       setPaywallOpen(true);
@@ -182,7 +204,9 @@ export default function App() {
           <div className="mt-6 flex justify-center gap-3">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Powered by Gemini Pro</span>
             <span className="text-slate-300">|</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">1 Free Credit Available</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {isSubscribed ? "Unlimited Pro Active" : freeLeft > 0 ? `${freeLeft} Free Draft Available` : "Credit Expired"}
+            </span>
           </div>
         </div>
 
@@ -228,41 +252,52 @@ export default function App() {
         <motion.div 
           initial={{ x: 100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          className="fixed bottom-24 right-10 z-30 bg-white border border-slate-200 shadow-xl p-4 rounded-xl flex items-center gap-4 max-w-xs"
+          className="fixed bottom-32 right-10 z-30 bg-white border border-slate-200 shadow-2xl p-5 rounded-2xl flex items-center gap-4 max-w-xs"
         >
-          <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-            <Zap size={18} />
+          <div className={cn(
+            "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+            freeLeft > 0 ? "bg-slate-50 text-slate-400" : "bg-red-50 text-red-500"
+          )}>
+            {freeLeft > 0 ? <Zap size={20} /> : <ShieldCheck size={20} />}
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-800">Trial Status</p>
-            <p className="text-[10px] text-slate-500">{freeLeft} generations remaining for this session.</p>
+            <p className="text-xs font-bold text-slate-800">{freeLeft > 0 ? "Free Trial Active" : "Trial Limit Reached"}</p>
+            <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+              {freeLeft > 0 
+                ? `You have ${freeLeft} generation left. No wallet needed yet.`
+                : "Connect wallet and subscribe for unlimited access."
+              }
+            </p>
           </div>
         </motion.div>
       )}
 
       {/* Footer Status Bar */}
-      <footer className="px-10 py-6 border-t border-slate-100 flex justify-between items-center bg-white mt-auto">
-        <div className="flex items-center gap-6 text-[10px] font-bold text-slate-400 tracking-wider">
-          <span className="flex items-center gap-1.5 uppercase">
-            <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-            System Status: Optimal
+      <footer className="w-full px-10 py-10 border-t border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-sm mt-20">
+        <div className="flex items-center gap-8 text-[10px] font-bold text-slate-400 tracking-[0.1em]">
+          <span className="flex items-center gap-2 uppercase">
+            <div className="w-2 h-2 bg-green-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.5)]"></div>
+            System Status: Healthy
           </span>
-          <span className="flex items-center gap-1.5">
-            NETWORK: MAINNET
+          <span className="flex items-center gap-2 uppercase">
+            Network: Mainnet-Beta
           </span>
-          <span className="text-slate-200">|</span>
+          <span className="text-slate-200 text-lg font-light">|</span>
           <button 
             onClick={() => {
-              localStorage.removeItem("guest_id");
-              window.location.reload();
+              if (confirm("Resetting the session will clear your trial data. Proceed?")) {
+                localStorage.removeItem("guest_id");
+                localStorage.removeItem("last_wallet");
+                window.location.reload();
+              }
             }}
-            className="hover:text-slate-600 transition-colors cursor-pointer uppercase"
+            className="hover:text-slate-900 transition-colors cursor-pointer uppercase underline underline-offset-4 decoration-slate-200 hover:decoration-slate-900"
           >
-            Reset Session (Trial)
+            Reset Session
           </button>
         </div>
-        <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-          &copy; {new Date().getFullYear()} {import.meta.env.VITE_APP_NAME || "InstantRole"}. Built for the new economy.
+        <div className="text-[10px] font-bold text-slate-300 tracking-[0.2em] uppercase">
+          &copy; {new Date().getFullYear()} {import.meta.env.VITE_APP_NAME || "InstantRole"}. Professional AI Drafting.
         </div>
       </footer>
 
