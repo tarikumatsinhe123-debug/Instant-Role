@@ -43,8 +43,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
         // but for now we'll just use the address for the transaction.
       }
       
-      const signature = await sendPayment(currentWallet, 10);
-      const res = await fetch("/api/subscription/confirm", {
+      const signature = await sendPayment(currentWallet, 1.99);
+      const res = await fetch("/api/payment/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: currentWallet, txSignature: signature }),
@@ -53,7 +53,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
         onSuccess(currentWallet);
         onClose();
       } else {
-        throw new DOMException("Failed to confirm subscription on server", "AbortError");
+        throw new DOMException("Failed to confirm payment on server", "AbortError");
       }
     } catch (err: any) {
       setError(err.message || "Payment failed. Please try again.");
@@ -64,7 +64,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
 
   if (!isOpen) return null;
 
-  const solNeeded = solPrice ? (10 / solPrice).toFixed(4) : "...";
+  const solNeeded = solPrice ? (1.99 / solPrice).toFixed(4) : "...";
 
   return (
     <AnimatePresence>
@@ -94,8 +94,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
               <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-900 text-white rounded-2xl mb-6 shadow-xl shadow-slate-900/20">
                 <Zap size={28} />
               </div>
-              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Unlock Infinite Roles</h2>
-              <p className="text-slate-400 mt-2 text-sm font-medium">Professional grade templates for the modern workforce.</p>
+              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Purchase AI Draft</h2>
+              <p className="text-slate-400 mt-2 text-sm font-medium">Get a high-performance draft for your next job application.</p>
             </div>
 
             <div className="space-y-6 mb-10">
@@ -118,8 +118,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
 
               <div className="p-6 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Subscription cost</span>
-                  <span className="text-lg font-bold text-slate-900">$10.00 <span className="text-xs font-medium text-slate-400">/mo</span></span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Single Draft Cost</span>
+                  <span className="text-lg font-bold text-slate-900">$1.99 <span className="text-xs font-medium text-slate-400">/use</span></span>
                 </div>
                 <div className="h-[1px] bg-slate-200/50 w-full" />
                 <div className="flex justify-between items-center text-sm">
@@ -132,7 +132,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
 
               <div className="flex items-start space-x-3 text-xs text-slate-400 font-medium leading-relaxed bg-blue-50/30 p-4 rounded-2xl border border-blue-100/50">
                 <ShieldCheck className="text-blue-500 mt-0.5 shrink-0" size={16} />
-                <p>Transactions are secured on-chain. Your subscription will be active instantly upon confirmation.</p>
+                <p>Transactions are secured on-chain. Generation credits will be active instantly upon confirmation.</p>
               </div>
             </div>
 
@@ -160,7 +160,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, wal
               ) : (
                 <>
                   <Wallet size={18} />
-                  <span>{!walletAddress ? "Connect Wallet to Pay" : `Subscribe via ${selectedAsset}`}</span>
+                  <span>{!walletAddress ? "Connect Wallet to Pay" : `Pay $1.99 via ${selectedAsset}`}</span>
                 </>
               )}
             </button>

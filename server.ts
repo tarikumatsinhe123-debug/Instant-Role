@@ -4,7 +4,6 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
@@ -44,40 +43,6 @@ if (firebaseConfig.apiKey) {
   console.warn("Firebase config missing. Some features will not work.");
 }
 
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: null // Server is unauthenticated in this setup
-    },
-    operationType,
-    path
-  };
-  const jsonError = JSON.stringify(errInfo);
-  console.error('Firestore Error: ', jsonError);
-  throw new DOMException(jsonError, 'AbortError');
-}
-
 const app = express();
 app.use(express.json());
 
@@ -86,53 +51,6 @@ if (process.env.VERCEL) {
 }
 
 // API Routes
-app.post("/api/generate", async (req, res) => {
-  const { jobTitle } = req.body;
-  
-  if (!jobTitle) {
-    return res.status(400).json({ error: "Job title is required" });
-  }
-
-  if (!genAI) {
-    return res.status(500).json({ error: "AI API key not configured" });
-  }
-
-  const prompt = `
-    Generate a professional resume and a tailored cover letter for the job title: "${jobTitle}".
-    
-    The response MUST be in JSON format with the following structure:
-    {
-      "resume": {
-        "summary": "Professional summary...",
-        "experience": [
-          { "title": "Job Title", "company": "Example Corp", "period": "2020 - Present", "bullets": ["bullet 1", "bullet 2"] }
-        ],
-        "skills": ["Skill 1", "Skill 2"]
-      },
-      "coverLetter": "Full cover letter text..."
-    }
-    
-    Ensure the content is high-quality, professional, and includes industry-standard keywords.
-  `;
-
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const responseText = result.response.text();
-    if (!responseText) throw new Error("No text returned from AI");
-    res.json(JSON.parse(responseText));
-  } catch (error) {
-    console.error("AI Generation Error:", error);
-    res.status(500).json({ error: "Failed to generate content", details: String(error) });
-  }
-});
-
 app.get("/api/user/:id", async (req, res) => {
   const { id } = req.params;
   const key = id.toLowerCase();
@@ -141,7 +59,7 @@ app.get("/api/user/:id", async (req, res) => {
     walletAddress: id.startsWith("guest_") ? null : id, 
     id: key, 
     freeUsesCount: 0, 
-    subscriptionExpiry: null 
+    paidUsesAvailable: 0 
   });
   
   try {
@@ -153,7 +71,7 @@ app.get("/api/user/:id", async (req, res) => {
         walletAddress: id.startsWith("guest_") ? null : id,
         id: key,
         freeUsesCount: 0,
-        subscriptionExpiry: null,
+        paidUsesAvailable: 0,
       });
     }
   } catch (error) {
@@ -177,24 +95,30 @@ app.post("/api/usage/increment", async (req, res) => {
       walletAddress: id.startsWith("guest_") ? null : id,
       id: key,
       freeUsesCount: 0, 
-      subscriptionExpiry: null 
+      paidUsesAvailable: 0 
     };
 
-    // Double check subscription
-    const isSubscribed = userData.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
+    const hasPaidUses = userData.paidUsesAvailable > 0;
+    const hasFreeUses = userData.freeUsesCount < 5;
 
-    if (!isSubscribed && userData.freeUsesCount >= 1) {
-      return res.status(403).json({ error: "Free limit reached. Subscription required." });
+    if (!hasFreeUses && !hasPaidUses) {
+      return res.status(403).json({ error: "No uses remaining. Payment required." });
     }
 
     if (!userDoc.exists()) {
       userData.freeUsesCount = 1;
+      userData.paidUsesAvailable = 0;
       await setDoc(userRef, userData);
-    } else if (!isSubscribed) {
+    } else if (hasFreeUses) {
       await updateDoc(userRef, {
         freeUsesCount: increment(1)
       });
       userData.freeUsesCount += 1;
+    } else {
+      await updateDoc(userRef, {
+        paidUsesAvailable: increment(-1)
+      });
+      userData.paidUsesAvailable -= 1;
     }
     
     res.json(userData);
@@ -204,7 +128,7 @@ app.post("/api/usage/increment", async (req, res) => {
   }
 });
 
-app.post("/api/subscription/confirm", async (req, res) => {
+app.post("/api/payment/confirm", async (req, res) => {
   const { walletAddress } = req.body;
   if (!walletAddress) return res.status(400).json({ error: "Wallet address required" });
 
@@ -214,19 +138,17 @@ app.post("/api/subscription/confirm", async (req, res) => {
   const userRef = doc(db, "users", key);
 
   try {
-    const expiry = new Date();
-    expiry.setDate(expiry.getDate() + 30);
-    const subscriptionExpiry = expiry.toISOString();
-
     const userDoc = await getDoc(userRef);
     if (userDoc.exists()) {
-      await updateDoc(userRef, { subscriptionExpiry });
+      await updateDoc(userRef, { 
+        paidUsesAvailable: increment(1) 
+      });
     } else {
       await setDoc(userRef, {
         walletAddress,
         id: key,
-        freeUsesCount: 0,
-        subscriptionExpiry
+        freeUsesCount: 0, 
+        paidUsesAvailable: 1
       });
     }
 

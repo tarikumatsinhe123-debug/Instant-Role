@@ -17,13 +17,12 @@
           "type": "integer",
           "description": "Number of free AI uses consumed"
         },
-        "subscriptionExpiry": {
-          "type": "string",
-          "format": "date-time",
-          "description": "ISO timestamp of when the subscription expires"
+        "paidUsesAvailable": {
+          "type": "integer",
+          "description": "Number of paid uses currently available"
         }
       },
-      "required": ["id", "freeUsesCount"]
+      "required": ["id", "freeUsesCount", "paidUsesAvailable"]
     }
   },
   "firestore": {

@@ -10,7 +10,7 @@ import { cn } from "./lib/utils";
 interface UserData {
   walletAddress: string;
   freeUsesCount: number;
-  subscriptionExpiry: string | null;
+  paidUsesAvailable: number;
 }
 
 export default function App() {
@@ -72,9 +72,9 @@ export default function App() {
     }
   };
 
-  const isSubscribed = userData?.subscriptionExpiry && new Date(userData.subscriptionExpiry) > new Date();
-  const freeLeft = Math.max(0, 1 - (userData?.freeUsesCount || 0));
-  const canGenerate = isSubscribed || freeLeft > 0;
+  const freeLeft = Math.max(0, 5 - (userData?.freeUsesCount || 0));
+  const paidLeft = userData?.paidUsesAvailable || 0;
+  const canGenerate = freeLeft > 0 || paidLeft > 0;
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +87,7 @@ export default function App() {
       await fetchUserStatus(id);
     }
 
-    if (!canGenerate && !isSubscribed) {
+    if (!canGenerate) {
       setPaywallOpen(true);
       return;
     }
@@ -141,7 +141,11 @@ export default function App() {
                 "inline-block w-2 h-2 rounded-full mr-2",
                 canGenerate ? "bg-green-400" : "bg-red-400 animate-pulse"
               )}></span>
-              {isSubscribed ? "PRO ACCESS" : `${freeLeft} Trial Credits Remaining`}
+              {paidLeft > 0 
+                ? `PRO CREDIT: ${paidLeft} LEFT` 
+                : freeLeft > 0 
+                  ? `${freeLeft} FREE TRIALS LEFT` 
+                  : "OUT OF CREDITS"}
             </div>
           )}
           
@@ -205,7 +209,11 @@ export default function App() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Powered by Gemini Pro</span>
             <span className="text-slate-300">|</span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {isSubscribed ? "Unlimited Pro Active" : freeLeft > 0 ? `${freeLeft} Free Draft Available` : "Credit Expired"}
+              {paidLeft > 0 
+                ? `${paidLeft} Paid Credit Available` 
+                : freeLeft > 0 
+                  ? `${freeLeft} Free Drafts Available` 
+                  : "Credit Expired"}
             </span>
           </div>
         </div>
@@ -235,11 +243,11 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">No Upfront Cost</div>
-                  <p className="text-sm text-slate-500 leading-relaxed">Get your first draft absolutely free. No wallet connection needed initially.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed">Get your first five drafts absolutely free. No wallet connection needed initially.</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">Unlimited Access</div>
-                  <p className="text-sm text-slate-500 leading-relaxed">Go beyond the 1-free trial and generate infinite variations for any application.</p>
+                  <div className="text-slate-900 font-bold uppercase text-[10px] tracking-widest">Pay-As-You-Go</div>
+                  <p className="text-sm text-slate-500 leading-relaxed">Go beyond the 5-free trial for just $1.99 per professional draft. Higher accuracy than free tools.</p>
                 </div>
               </div>
             )}
@@ -248,7 +256,7 @@ export default function App() {
       </main>
 
       {/* Subtle Trial Toast */}
-      {(wallet || guestId) && !isSubscribed && (
+      {(wallet || guestId) && paidLeft === 0 && (
         <motion.div 
           initial={{ x: 100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -264,8 +272,8 @@ export default function App() {
             <p className="text-xs font-bold text-slate-800">{freeLeft > 0 ? "Free Trial Active" : "Trial Limit Reached"}</p>
             <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
               {freeLeft > 0 
-                ? `You have ${freeLeft} generation left. No wallet needed yet.`
-                : "Connect wallet and subscribe for unlimited access."
+                ? `You have ${freeLeft} ${freeLeft === 1 ? "generation" : "generations"} left. No wallet needed yet.`
+                : "Connect wallet and pay per use for continued access."
               }
             </p>
           </div>
