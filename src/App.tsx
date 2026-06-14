@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Sparkles, Loader2, Wallet, ArrowRight, Zap, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { connectWallet } from "./lib/web3";
 import { generateResumeAndCoverLetter } from "./lib/gemini";
 import { ResumeViewer } from "./components/ResumeViewer";
@@ -318,7 +319,7 @@ export default function App() {
           fetchUserStatus(address);
         }}
       />
+      <SpeedInsights />
     </div>
   );
 }
-
